@@ -5,6 +5,7 @@ import {
   createMemo,
   createSignal,
   onCleanup,
+  splitProps,
 } from "solid-js";
 
 interface Counter {
@@ -16,6 +17,19 @@ interface AppConfig extends Partial<Counter> {
   isPlaying?: boolean;
   guided?: boolean;
 }
+
+interface SetCounterProps {
+  type: "minutes" | "seconds";
+  value: number;
+}
+
+interface CounterComponentProps extends AppConfig {
+  setCounter: (props: SetCounterProps) => void;
+}
+
+const ONE_SECOND = 1000;
+const DEFAULT_COUNTER_MINUTES = 5;
+const DEFAULT_COUNTER_SECONDS = 0;
 
 const TimeElement: Component<{ value: number; label: string }> = (props) => {
   return (
@@ -30,64 +44,151 @@ const TimeElement: Component<{ value: number; label: string }> = (props) => {
   );
 };
 
-const Counter: Component<AppConfig> = (props) => {
-  const [counter, setCounter] = createSignal<Counter>({
-    minutes: props.minutes,
-    seconds: props.seconds,
-  });
+const Counter: Component<CounterComponentProps> = (props) => {
+  const [counter, isPlaying, restProps] = splitProps(
+    props,
+    ["minutes", "seconds"],
+    ["isPlaying"],
+  );
+
+  const [timer, setTimerId] = createSignal<number>(0);
 
   const countDown = () => {
-    setCounter((prev) => {
-      const { minutes, seconds } = prev;
-
-      return {
-        minutes: seconds === 0 ? minutes - 1 : minutes,
-        seconds: seconds === 0 ? 59 : seconds - 1,
-      };
+    restProps.setCounter({
+      type: "minutes",
+      value: counter.seconds === 0 ? counter.minutes - 1 : counter.minutes,
+    });
+    restProps.setCounter({
+      type: "seconds",
+      value: counter.seconds === 0 ? 59 : counter.seconds - 1,
     });
   };
 
-  const timer = setInterval(countDown, 1000);
+  createEffect(() => {
+    if (isPlaying) {
+      const timer = setInterval(countDown, ONE_SECOND);
+      setTimerId(timer);
+    } else {
+      clearInterval(timer());
+    }
+  });
 
-  onCleanup(() => clearInterval(timer));
+  onCleanup(() => clearInterval(timer()));
 
   return (
     <div class="grid grid-flow-col gap-5 text-center auto-cols-max">
-      <TimeElement value={counter().minutes} label="minutes" />
-      <TimeElement value={counter().seconds} label="seconds" />
+      <TimeElement value={counter.minutes} label="minutes" />
+      <TimeElement value={counter.seconds} label="seconds" />
     </div>
   );
 };
 
 const App: Component = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [minutes, setMinutes] = createSignal(
-    Number(searchParams?.minutes as string) || 2,
-  );
 
-  const [seconds, setSeconds] = createSignal(
-    Number(searchParams?.seconds as string) || 0,
-  );
+  const [minutes, setMinutes] = createSignal(DEFAULT_COUNTER_MINUTES);
 
-  const updateConfig = () => {
-    const newMinutes = 3;
-    const newSeconds = 58;
+  const [seconds, setSeconds] = createSignal(DEFAULT_COUNTER_SECONDS);
 
-    setMinutes(newMinutes);
-    setSeconds(newSeconds);
-    setSearchParams({ minutes: newMinutes, seconds: newSeconds });
+  const [isPlaying, setPlay] = createSignal(false);
+
+  const play = () => {
+    setPlay(true);
   };
+
+  const stop = () => {
+    setPlay(false);
+  };
+
+  const updateCounter = (props: SetCounterProps) => {
+    switch (props.type) {
+      case "seconds":
+        return setSeconds(props.value);
+      case "minutes":
+        return setMinutes(props.value);
+    }
+  };
+
+  const updateConfig = (
+    props:
+      | { type: "minutes" | "seconds"; value: number }
+      | { type: "isPlaying"; value: boolean },
+  ) => {
+    console.log("updateConfig called with:", props);
+    let newMinutes = minutes();
+    let newSeconds = seconds();
+    let newIsPlaying = isPlaying();
+
+    if (props.type === "minutes") {
+      newMinutes = props.value;
+    } else if (props.type === "seconds") {
+      newSeconds = props.value;
+    } else if (props.type === "isPlaying") {
+      newIsPlaying = props.value;
+    }
+
+    setSearchParams({
+      minutes: newMinutes,
+      seconds: newSeconds,
+      isPlaying: newIsPlaying ? "true" : "false",
+    });
+    console.log(
+      `Updated search params: minutes=${newMinutes}, seconds=${newSeconds}, isPlaying=${newIsPlaying}`,
+    );
+  };
+
+  createEffect(
+    () => {
+      console.log("App effect ran");
+      const currentMinutes = Number(searchParams.minutes);
+      const currentSeconds = Number(searchParams.seconds);
+      const currentIsPlaying = searchParams?.isPlaying === "true" || false;
+
+      console.log(
+        `Effect: minutes=${currentMinutes}, seconds=${currentSeconds}, isPlaying=${currentIsPlaying}`,
+      );
+
+      setMinutes(currentMinutes);
+      setSeconds(currentSeconds);
+      setPlay(currentIsPlaying);
+    },
+    null,
+    { name: "coucou" },
+  );
 
   return (
     <>
-      <header>this is a header</header>
-      <main>
-        <Counter seconds={seconds()} minutes={minutes()} />
-        <button onClick={updateConfig} class="btn">
-          click { minutes()} {seconds()}
+      <header class="fixed top-2 w-full h-8 rounded-4xl bg-slate-500/50">
+        this is a header
+      </header>
+      <main class="flex flex-col gap-3 h-lvh items-center justify-center p-32">
+        <Counter
+          seconds={seconds()}
+          minutes={minutes()}
+          isPlaying={isPlaying()}
+          setCounter={updateCounter}
+        />
+        <button
+          type="button"
+          onclick={() => updateConfig({ type: "seconds", value: 12 })}
+          class="btn"
+        >
+          click
+        </button>
+        <p>
+          min:{minutes()} sec:{seconds()} play:{isPlaying()}
+        </p>
+
+        <button type="button" onclick={play} class="btn btn-primary">
+          Play
+        </button>
+        <button type="button" onclick={stop} class="btn btn-secondary">
+          Stop
         </button>
       </main>
-      <footer>this is a foote</footer>
+      <footer class="fixed bottom-2 w-full h-8 rounded-4xl bg-slate-500/50">
+        this is a foote
+      </footer>
     </>
   );
 };
