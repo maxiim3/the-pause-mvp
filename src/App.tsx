@@ -1,113 +1,11 @@
-import { useLocation, useSearchParams } from "@solidjs/router";
-import {
-  type Component,
-  createEffect,
-  createMemo,
-  createSignal,
-  onCleanup,
-  splitProps,
-} from "solid-js";
-
-interface Counter {
-  minutes: number;
-  seconds: number;
-}
-
-interface AppConfig extends Partial<Counter> {
-  isPlaying?: boolean;
-  guided?: boolean;
-}
-
-interface SetCounterProps {
-  type: "minutes" | "seconds";
-  value: number;
-}
-
-interface CounterComponentProps extends AppConfig {
-  setCounter: (props: SetCounterProps) => void;
-}
-
-const ONE_SECOND = 1000;
-const DEFAULT_COUNTER_MINUTES = 5;
-const DEFAULT_COUNTER_SECONDS = 0;
-
-const TimeElement: Component<{ value: number; label: string }> = (props) => {
-  return (
-    <div class="flex flex-col">
-      <span class="countdown font-mono text-5xl">
-        <span style={{ "--value": props.value }} aria-live="polite">
-          {props.value}
-        </span>
-      </span>
-      {props.label}
-    </div>
-  );
-};
-
-const Counter: Component<CounterComponentProps> = (props) => {
-  const [counter, isPlaying, restProps] = splitProps(
-    props,
-    ["minutes", "seconds"],
-    ["isPlaying"],
-  );
-
-  const [timer, setTimerId] = createSignal<number>(0);
-
-  const countDown = () => {
-    restProps.setCounter({
-      type: "minutes",
-      value: counter.seconds === 0 ? counter.minutes - 1 : counter.minutes,
-    });
-    restProps.setCounter({
-      type: "seconds",
-      value: counter.seconds === 0 ? 59 : counter.seconds - 1,
-    });
-  };
-
-  createEffect(() => {
-    if (isPlaying) {
-      const timer = setInterval(countDown, ONE_SECOND);
-      setTimerId(timer);
-    } else {
-      clearInterval(timer());
-    }
-  });
-
-  onCleanup(() => clearInterval(timer()));
-
-  return (
-    <div class="grid grid-flow-col gap-5 text-center auto-cols-max">
-      <TimeElement value={counter.minutes} label="minutes" />
-      <TimeElement value={counter.seconds} label="seconds" />
-    </div>
-  );
-};
+import { useSearchParams } from "@solidjs/router";
+import { type Component, createEffect } from "solid-js";
+import CounterBlock from "./components/counter-block";
+import { minutes, seconds, setMinutes, setSeconds } from "./counter";
+import { isPlaying, play, setPlay, stop } from "./player";
 
 const App: Component = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const [minutes, setMinutes] = createSignal(DEFAULT_COUNTER_MINUTES);
-
-  const [seconds, setSeconds] = createSignal(DEFAULT_COUNTER_SECONDS);
-
-  const [isPlaying, setPlay] = createSignal(false);
-
-  const play = () => {
-    setPlay(true);
-  };
-
-  const stop = () => {
-    setPlay(false);
-  };
-
-  const updateCounter = (props: SetCounterProps) => {
-    switch (props.type) {
-      case "seconds":
-        return setSeconds(props.value);
-      case "minutes":
-        return setMinutes(props.value);
-    }
-  };
 
   const updateConfig = (
     props:
@@ -162,19 +60,50 @@ const App: Component = () => {
         this is a header
       </header>
       <main class="flex flex-col gap-3 h-lvh items-center justify-center p-32">
-        <Counter
-          seconds={seconds()}
-          minutes={minutes()}
-          isPlaying={isPlaying()}
-          setCounter={updateCounter}
-        />
-        <button
-          type="button"
-          onclick={() => updateConfig({ type: "seconds", value: 12 })}
-          class="btn"
-        >
-          click
-        </button>
+        <CounterBlock />
+        <div class="flex items-center gap-4">
+          <button
+            type="button"
+            onclick={() =>
+              updateConfig({ type: "minutes", value: minutes() - 1 })
+            }
+            class="btn btn-sm"
+          >
+            - min
+          </button>
+          <p>{minutes()} min</p>
+          <button
+            type="button"
+            onclick={() =>
+              updateConfig({ type: "minutes", value: minutes() + 1 })
+            }
+            class="btn btn-sm"
+          >
+            + min
+          </button>
+        </div>
+        <div class="flex items-center gap-4">
+          <button
+            type="button"
+            onclick={() =>
+              updateConfig({ type: "seconds", value: seconds() - 1 })
+            }
+            class="btn btn-sm"
+          >
+            - sec
+          </button>
+          <p>{seconds()} sec</p>
+          <button
+            type="button"
+            onclick={() =>
+              updateConfig({ type: "seconds", value: seconds() + 1 })
+            }
+            class="btn btn-sm"
+          >
+            + sec
+          </button>
+        </div>
+
         <p>
           min:{minutes()} sec:{seconds()} play:{isPlaying()}
         </p>
